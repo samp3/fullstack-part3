@@ -1,6 +1,0 @@
-POST http://localhost:3001/notes 
-content-type: application/json
-
-{
-  "content": "VS Coden REST client on paras keksintö sitten viipaloidun leivän"
-}
