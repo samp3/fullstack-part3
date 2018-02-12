@@ -3,6 +3,7 @@ const app = express()
 const bodyParser = require('body-parser')
 const morgan = require('morgan')
 const cors = require('cors')
+const Person = require('./models/person')
 
 morgan.token('post_data', function (req) { return JSON.stringify(req.body) })
 
@@ -11,53 +12,44 @@ app.use(morgan(':method :url :post_data :status :res[content-length] - :response
 app.use(cors())
 app.use(express.static('build'))
 
-let persons = [
-  {
-    name: 'Arto Hellas',
-    number: '040-123456',
-    id: 1
-  },
-  {
-    name: 'Martti Tienari',
-    number: '040-123456',
-    id: 2
-  },
-  {
-    name: 'Arto Järvinen',
-    number: '040-123456',
-    id: 3
-  },
-  {
-    name: 'Lea Kutvonen',
-    number: '040-123456',
-    id: 4
-  }
-]
-
 
 app.get('/', (req, res) => {
   res.send('<h1>Hello World!</h1>')
 })
 
 app.get('/api/persons', (req, res) => {
-  res.json(persons)
+  Person
+    .find({}, { __v: 0 })
+    .then(persons => {
+      res.json(persons.map(Person.format))
+    })
+    .catch(error => {
+      res.status(404).end()
+    })
 })
 
 app.get('/info', (req, res) => {
-  const maara = persons.length
-  res.send(`<p>puhelinluettelossa ${maara} henkilön tiedot</p>
-            <p>${new Date}</p>`)
+  Person.count({})
+    .then(cnt => {
+      res.send(`<p>puhelinluettelossa on ${cnt} henkilön tiedot</p>
+    <p>${new Date()}</p>`)
+    })
 })
 
 app.get('/api/persons/:id', (request, response) => {
-  const id = Number(request.params.id)
-  const person = persons.find(person => person.id === id)
-
-  if (person) {
-    response.json(person)
-  } else {
-    response.status(404).end()
-  }
+  Person
+    .findById(request.params.id)
+    .then(person => {
+      if (person) {
+        response.json(Person.format(person))
+      }
+      else {
+        response.status(404).end()
+      }
+    })
+    .catch(error => {
+      res.status(400).send({ error: 'malformed id' })
+    })
 })
 
 const generateId = () => {
@@ -85,22 +77,36 @@ app.post('/api/persons', (request, response) => {
     return response.status(400).json({ error: 'name must be unique' })
   }
 
-  const person = {
+  const person = new Person({
     name: body.name,
-    number: body.number,
-    id: generateId()
-  }
+    number: body.number
+  })
 
-  persons = persons.concat(person)
-
-  response.json(person)
+  person
+    .save()
+    .then(Person.format)
+    .then(savedPerson => {
+      response.json(format(savedPerson))
+    })
+    .catch(error => {
+      if (error.name === 'BulkWriteError') {
+        response.status(400).send(
+          { error: 'person exists' })
+      }
+      else {
+        response.status(400).send({ error: 'malformed data' })
+      }
+    })
 })
 
 app.delete('/api/persons/:id', (request, response) => {
-  const id = Number(request.params.id)
-  persons = persons.filter(person => person.id !== id)
-
-  response.status(204).end()
+  Person.findByIdAndRemove(request.params.id)
+    .then(() => {
+      response.status(204).end()
+    })
+    .catch(() => {
+      response.status(400).send({ error: 'malformed id' })
+    })
 })
 
 const PORT = process.env.PORT || 3001
